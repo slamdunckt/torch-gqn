@@ -170,7 +170,7 @@ if __name__ == '__main__':
     os.mkdir(torch_dataset_path_test)
 
     ## train
-    file_names = _get_dataset_files(dataset_info, 'train', '.')
+    file_names = _get_dataset_files(dataset_info, 'train', '/home/cylee/gqn/data/gqn-dataset')
 
     tot = 0
     for file in file_names:
@@ -185,7 +185,7 @@ if __name__ == '__main__':
     print(f' [-] {tot} scenes in the train dataset')
 
     ## test
-    file_names = _get_dataset_files(dataset_info, 'test', '.')
+    file_names = _get_dataset_files(dataset_info, 'test', '/home/cylee/gqn/data/gqn-dataset/')
 
     tot = 0
     for file in file_names:
