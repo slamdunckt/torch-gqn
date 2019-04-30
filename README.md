@@ -7,9 +7,19 @@
 #### Pixyz Implementation: https://github.com/masa-su/pixyzoo/tree/master/GQN
 
 ## Requirements
-- Python >=3.6
+- Python >=3.6 (read Wiki if you use Ubuntu-16.04)
 - PyTorch
 - TensorBoardX
+
+## Convert tfrecord dataset into torch-readable data
+```
+./dataset/convert2torch.py mazes
+```
+
+```
+for f in *.gz ; do gzip -d "$f" ; done
+```
+
 
 ## How to Train
 ```
