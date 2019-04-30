@@ -12,6 +12,23 @@ from gqn_dataset import GQNDataset, Scene, transform_viewpoint, sample_batch
 from scheduler import AnnealingStepLR
 from model import GQN
 
+def load_checkpoint(model, optimizer, filename):
+    # Note: Input model & optimizer should be pre-defined.  This routine only updates their states.
+    start_epoch = 0
+    if os.path.isfile(filename):
+        print("=> loading checkpoint '{}'".format(filename))
+        checkpoint = torch.load(filename)
+        start_epoch = checkpoint['epoch']
+        model.load_state_dict(checkpoint['state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        print("=> loaded checkpoint '{}' (epoch {})"
+                  .format(filename, checkpoint['epoch']))
+    else:
+        print("=> no checkpoint found at '{}'".format(filename))
+
+    return model, optimizer, start_epoch
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Generative Query Network Implementation')
     parser.add_argument('--gradient_steps', type=int, default=2*10**6, help='number of gradient steps to run (default: 2 million)')
@@ -21,10 +38,10 @@ if __name__ == '__main__':
                         default="../data/mazes-torch/train")
     parser.add_argument('--test_data_dir', type=str, help='location of test data', \
                         default="../data/mazes-torch/test")
-    parser.add_argument('--root_log_dir', type=str, help='root location of log', default='/workspace/logs')
+    parser.add_argument('--root_log_dir', type=str, help='root location of log', default='../logs')
     parser.add_argument('--log_dir', type=str, help='log directory (default: GQN)', default='GQN')
     parser.add_argument('--log_interval', type=int, help='interval number of steps for logging', default=100)
-    parser.add_argument('--save_interval', type=int, help='interval number of steps for saveing models', default=10000)
+    parser.add_argument('--save_interval', type=int, help='interval number of steps for saveing models', default=1000)
     parser.add_argument('--workers', type=int, help='number of data loading workers', default=0)
     parser.add_argument('--device_ids', type=int, nargs='+', help='list of CUDA devices (default: [0])', default=[0])
     parser.add_argument('--representation', type=str, help='representation network (default: pool)', default='pool')
@@ -53,6 +70,9 @@ if __name__ == '__main__':
     log_interval_num = args.log_interval
     save_interval_num = args.save_interval
     log_dir = os.path.join(args.root_log_dir, args.log_dir)
+    
+    
+    #TODO: rewrite w.r.t resume training
     os.mkdir(log_dir)
     os.mkdir(os.path.join(log_dir, 'models'))
     os.mkdir(os.path.join(log_dir,'runs'))
@@ -78,6 +98,7 @@ if __name__ == '__main__':
     # Maximum number of training steps
     S_max = args.gradient_steps
 
+    # TODO: rewrite w.r.t resume training
     # Define model
     model = GQN(representation=args.representation, L=L, shared_core=args.shared_core).to(device)
     if len(args.device_ids)>1:
@@ -135,7 +156,9 @@ if __name__ == '__main__':
                 writer.add_image('test_generation', make_grid(x_q_hat_test, 6, pad_value=1), t)
 
             if t % save_interval_num == 0:
-                torch.save(model.state_dict(), log_dir + "/models/model-{}.pt".format(t))
+                state = {'epoch': t+1, 'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict(), }
+                torch.save(state, log_dir + "/models/model-{}.pt".format(t))
+                #torch.save(model.state_dict(), log_dir + "/models/model-{}.pt".format(t))
 
         # Compute empirical ELBO gradients
         (-elbo.mean()).backward()
