@@ -60,6 +60,8 @@ def sample_batch(x_data, v_data, D, M=None, seed=None):
         K = 20
     elif D == "Shepard-Metzler":
         K = 15
+    else:
+        K = 20
 
     # Sample number of views
     if not M:
