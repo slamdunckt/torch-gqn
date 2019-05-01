@@ -2,7 +2,7 @@ import argparse
 import datetime
 import math
 import os
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from tensorboardX import SummaryWriter
 import torch
 from torch import nn
@@ -12,19 +12,40 @@ from gqn_dataset import GQNDataset, Scene, transform_viewpoint, sample_batch
 from scheduler import AnnealingStepLR
 from model import GQN
 
+
 def load_checkpoint(model, optimizer, filename):
-    # Note: Input model & optimizer should be pre-defined.  This routine only updates their states.
+    # Note: Input model & optimizer should be pre-defined.
+    #       This routine only updates their states.
     start_epoch = 0
     if os.path.isfile(filename):
-        print("=> loading checkpoint '{}'".format(filename))
+        print("=> Loading checkpoint '{}'".format(filename))
         checkpoint = torch.load(filename)
         start_epoch = checkpoint['epoch']
-        model.load_state_dict(checkpoint['state_dict'])
+
+        #model.load_state_dict(checkpoint['state_dict'])  # simple original usage
+                                                          # but we used nn.parallel...
+        state_dict = checkpoint['state_dict']
+        from collections import OrderedDict
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = k[7:]
+            new_state_dict[name] = v
+        model.load_state_dict(new_state_dict)
+        '''
+        for k, v in state_dict.items():
+            if 'module' not in k:
+                k = 'module.'+k
+            else:
+                k = k.replace('features.module.', 'module.features.')
+            new_state_dict[k] = v
+        model.load_state_dict(new_state_dict)
+        '''
+
         optimizer.load_state_dict(checkpoint['optimizer'])
-        print("=> loaded checkpoint '{}' (epoch {})"
+        print("=> Loaded checkpoint '{}' (epoch {})"
                   .format(filename, checkpoint['epoch']))
     else:
-        print("=> no checkpoint found at '{}'".format(filename))
+        print("=> No checkpoint found at '{}'".format(filename))
 
     return model, optimizer, start_epoch
 
@@ -33,15 +54,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Generative Query Network Implementation')
     parser.add_argument('--gradient_steps', type=int, default=2*10**6, help='number of gradient steps to run (default: 2 million)')
     parser.add_argument('--batch_size', type=int, default=36, help='size of batch (default: 36)')
-    parser.add_argument('--dataset', type=str, default='Mazes', help='dataset (dafault: Mazes)')
+    parser.add_argument('--dataset', type=str, default='Shepard-Metzler', help='dataset (dafault: Shepard-Mtzler)')
     parser.add_argument('--train_data_dir', type=str, help='location of training data', \
-                        default="../data/mazes-torch/train")
+                        default="./dataset/mazes-torch/train")
     parser.add_argument('--test_data_dir', type=str, help='location of test data', \
-                        default="../data/mazes-torch/test")
-    parser.add_argument('--root_log_dir', type=str, help='root location of log', default='../logs')
+                        default="./dataset/mazes-torch/test")
+    parser.add_argument('--root_log_dir', type=str, help='root location of log', default='/home/wave/gqn/logs')
     parser.add_argument('--log_dir', type=str, help='log directory (default: GQN)', default='GQN')
     parser.add_argument('--log_interval', type=int, help='interval number of steps for logging', default=100)
-    parser.add_argument('--save_interval', type=int, help='interval number of steps for saveing models', default=1000)
+    parser.add_argument('--save_interval', type=int, help='interval number of steps for saveing models', default=100)
     parser.add_argument('--workers', type=int, help='number of data loading workers', default=0)
     parser.add_argument('--device_ids', type=int, nargs='+', help='list of CUDA devices (default: [0])', default=[0])
     parser.add_argument('--representation', type=str, help='representation network (default: pool)', default='pool')
@@ -50,10 +71,17 @@ if __name__ == '__main__':
                         help='whether to share the weights of the cores across generation steps (default: False)', \
                         default=False)
     parser.add_argument('--seed', type=int, help='random seed (default: None)', default=None)
+    parser.add_argument('--chkpt', type=int, help='checkpoint to resume training', default=None)
     args = parser.parse_args()
 
     device = f"cuda:{args.device_ids[0]}" if torch.cuda.is_available() else "cpu"
     
+    # Check-point
+    if args.chkpt!=None:
+        chkpt = args.chkpt
+    else:
+        chkpt = 0
+
     # Seed
     if args.seed!=None:
         torch.manual_seed(args.seed)
@@ -70,12 +98,12 @@ if __name__ == '__main__':
     log_interval_num = args.log_interval
     save_interval_num = args.save_interval
     log_dir = os.path.join(args.root_log_dir, args.log_dir)
-    
-    
-    #TODO: rewrite w.r.t resume training
-    os.mkdir(log_dir)
-    os.mkdir(os.path.join(log_dir, 'models'))
-    os.mkdir(os.path.join(log_dir,'runs'))
+    if not os.path.isdir(log_dir):
+        os.mkdir(log_dir)
+    if not os.path.isdir(os.path.join(log_dir, 'models')):
+        os.mkdir(os.path.join(log_dir, 'models'))
+    if not os.path.isdir(os.path.join(log_dir, 'runs')):
+        os.mkdir(os.path.join(log_dir, 'runs'))
 
     # TensorBoardX
     writer = SummaryWriter(log_dir=os.path.join(log_dir,'runs'))
@@ -98,25 +126,37 @@ if __name__ == '__main__':
     # Maximum number of training steps
     S_max = args.gradient_steps
 
-    # TODO: rewrite w.r.t resume training
     # Define model
     model = GQN(representation=args.representation, L=L, shared_core=args.shared_core).to(device)
-    if len(args.device_ids)>1:
-        model = nn.DataParallel(model, device_ids=args.device_ids)
-
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-4, betas=(0.9, 0.999), eps=1e-08)
     scheduler = AnnealingStepLR(optimizer, mu_i=5e-4, mu_f=5e-5, n=1.6e6)
 
+    # Update model if checkpoint was given
+    if chkpt > 0:
+        filename = log_dir + "/models/model-{}.pt".format(chkpt)
+        model, optimizer, start_epoch = load_checkpoint(model, optimizer, filename)
+    
+    if len(args.device_ids)>1:
+        model = nn.DataParallel(model, device_ids=args.device_ids)
+    
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if isinstance(v, torch.Tensor):
+                state[k] = v.to(device)
+        
     kwargs = {'num_workers':num_workers, 'pin_memory': True} if torch.cuda.is_available() else {}
 
     train_loader = DataLoader(train_dataset, batch_size=B, shuffle=True, **kwargs)
     test_loader = DataLoader(test_dataset, batch_size=B, shuffle=True, **kwargs)
 
     train_iter = iter(train_loader)
+
+    #TODO: save and restore the sampled test data when resume training from checkpoint
     x_data_test, v_data_test = next(iter(test_loader))
 
     # Training Iterations
-    for t in tqdm(range(S_max)):
+    #for t in tqdm(range(S_max)):
+    for t in trange(chkpt+1, S_max, total=S_max, initial=chkpt+1):
         try:
             x_data, v_data = next(train_iter)
         except StopIteration:
