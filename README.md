@@ -13,10 +13,12 @@
 
 ## Convert tfrecord dataset into torch-readable data
 ```
+# It takes very very long time (for the mazes dataset)
 ./dataset/convert2torch.py mazes
 ```
 
 ```
+# Unzip the converted .gz files because the training code reads .pt
 for f in *.gz ; do gzip -d "$f" ; done
 ```
 
