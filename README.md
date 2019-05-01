@@ -27,6 +27,9 @@ python train.py --train_data_dir /path/to/dataset/train --test_data_dir /path/to
 
 # Using multiple GPUs.
 python train.py --device_ids 0 1 2 3 --train_data_dir /path/to/dataset/train --test_data_dir /path/to/dataset/test
+
+# Recommended command.
+python train.py --device_ids 0 1 2 3 --dataset mazes --train_data_dir /path/to/dataset/train --test_data_dir /path/to/dataset/test --workers 8 --layers 8
 ```
 ### ❗️❗️CAUTION❗️❗️
 #### This implementation needs very high computational power because of enormous number of parameters.
