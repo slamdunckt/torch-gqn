@@ -3,25 +3,17 @@ from torch import nn
 from torch.nn import functional as F
 from torch.distributions import Normal
 from torch.distributions.kl import kl_divergence
-from representation import Pyramid, Tower, Pool
-from representation_patch import
+from representation_patch import PatchKey, Patcher
 from core import InferenceCore, GenerationCore
 
-class GQN(nn.Module):
-    def __init__(self, representation="pool", L=12, shared_core=False):
-        super(GQN, self).__init__()
+# model for attention
+# it contains only attention model ( not pyramid, tower and pool)
+class GQNAttention(nn.Module):
+    def __init__(self, L=12, shared_core=False):
+        super(GQNAttention, self).__init__()
 
         # Number of generative layers
         self.L = L
-
-        # Representation network
-        self.representation = representation
-        if representation=="pyramid":
-            self.phi = Pyramid()
-        elif representation=="tower":
-            self.phi = Tower()
-        elif representation=="pool":
-            self.phi = Pool()
 
         # Generation network
         self.shared_core = shared_core
@@ -37,12 +29,22 @@ class GQN(nn.Module):
         self.eta_e = nn.Conv2d(128, 2*3, kernel_size=5, stride=1, padding=2)
 
     # EstimateELBO
+    #### parameters
+    #### x : context images
+    #### v : poses
+    #### v_q : queried pose
+    #### x_q : ground truth image
+    #### sigma
+    #### variables
+    #### B : batch size
+    #### M : num of context images
     def forward(self, x, v, v_q, x_q, sigma):
         B, M, *_ = x.size()
 
         # Scene encoder
-
-        r= x.new_zeros((B,64,8,8))
+        r= Patcher(x,v)
+        #TODO from here (mkroughdiamond)
+        key_images = PatchKey(x).reshape(-1,64*M,1,64)
 
         # Generator initial state
         c_g = x.new_zeros((B, 64, 8, 8))
@@ -59,6 +61,12 @@ class GQN(nn.Module):
             mu_pi, logvar_pi = torch.split(self.eta_pi(h_g), 3, dim=1)
             std_pi = torch.exp(0.5*logvar_pi)
             pi = Normal(mu_pi, std_pi)
+
+            key_state = h_g.reshape(-1,64,64,1)
+            attn_weight = F.softmax(torch.matmul(key_images,key_state),1)
+
+
+            
 
             # Inference state update
             if self.shared_core:
@@ -125,7 +133,7 @@ class GQN(nn.Module):
 
         return torch.clamp(mu, 0, 1)
 
-    def kl_divergence(self, x, v, v_q, x_q):
+    def kl_divergence(self, x, v, v_q, x_q):    # for MULTI-gpu
         B, M, *_ = x.size()
 
         # Scene encoder

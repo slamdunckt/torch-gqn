@@ -3,7 +3,7 @@ import numpy as np
 from torch import nn
 from torch.nn import functional as F
 
-class Patcher(nn.Module):
+class Patcher(nn.Module):       #patcher of images and poses
     def __init__(self):
         super(Pool, self).__init__()
         self.conv1 = nn.Conv2d(5, 64, kernel_size=2, stride=2)
@@ -19,8 +19,8 @@ class Patcher(nn.Module):
     def forward(self, x, v):
         # Resisual connection
         patch_label =[];
-        batch_size = np.shape(x)[0];
-        context_size = np.shape(x)[3];
+        batch_size = x.shape[0];
+        context_size = x.shape[1];
         for i in range(batch_size):
             ttt=[]
             for j in range(8):
@@ -30,7 +30,7 @@ class Patcher(nn.Module):
                     tt.append(t)
                 ttt.append(tt)
             patch_label.append(ttt)
-        patch_all = np.zeros(np.shape(x))
+        patch_all = np.zeros(x.shape)
         for i in range(context_size):
             patch_size = 8
             stride_size = 4
@@ -61,7 +61,7 @@ class Patcher(nn.Module):
 
         return r
 
-class PatchKey(nn.Module):
+class PatchKey(nn.Module):  # patcher of pure images
     def __init__(self):
         super(Tower, self).__init__()
         self.conv1 = nn.Conv2d(3, 32, kernel_size=2, stride=2)
@@ -71,7 +71,7 @@ class PatchKey(nn.Module):
         self.conv5 = nn.Conv2d(32, 32, kernel_size=1, stride=1)
         self.conv6 = nn.Conv2d(32, 64, kernel_size=1, stride=1)
 
-    def forward(self, x, v):
+    def forward(self, x):
         # Resisual connection
         r = F.relu(self.conv1(x))
         r = F.relu(self.conv2(r))
