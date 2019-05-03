@@ -4,6 +4,7 @@ from torch.nn import functional as F
 from torch.distributions import Normal
 from torch.distributions.kl import kl_divergence
 from representation import Pyramid, Tower, Pool
+from representation_patch import
 from core import InferenceCore, GenerationCore
 
 class GQN(nn.Module):
@@ -40,22 +41,17 @@ class GQN(nn.Module):
         B, M, *_ = x.size()
 
         # Scene encoder
-        if self.representation=='tower':
-            r = x.new_zeros((B, 256, 16, 16))
-        else:
-            r = x.new_zeros((B, 256, 1, 1))
-        for k in range(M):
-            r_k = self.phi(x[:, k], v[:, k])
-            r += r_k
+
+        r= x.new_zeros((B,64,8,8))
 
         # Generator initial state
-        c_g = x.new_zeros((B, 128, 16, 16))
-        h_g = x.new_zeros((B, 128, 16, 16))
-        u = x.new_zeros((B, 128, 64, 64))
+        c_g = x.new_zeros((B, 64, 8, 8))
+        h_g = x.new_zeros((B, 64, 8, 8))
+        u = x.new_zeros((B, 64, 8, 8))
 
         # Inference initial state
-        c_e = x.new_zeros((B, 128, 16, 16))
-        h_e = x.new_zeros((B, 128, 16, 16))
+        c_e = x.new_zeros((B, 64, 8, 8))
+        h_e = x.new_zeros((B, 64, 8, 8))
 
         elbo = 0
         for l in range(self.L):
