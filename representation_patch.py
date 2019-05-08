@@ -20,23 +20,29 @@ class Patcher(nn.Module):
         # Resisual connection
         patch_label =[];
         batch_size = np.shape(x)[0];
-        context_size = np.shape(x)[3];
+        context_size = np.shape(x)[1];
         for i in range(batch_size):
-            ttt=[]
-            for j in range(8):
-                tt=[]
-                for k in range(8):
-                    t = [i//8+1, i%8+1]
-                    tt.append(t)
-                ttt.append(tt)
-            patch_label.append(ttt)
+            tttt=[]
+            for l in range(2):
+                ttt=[]
+                for j in range(8):
+                    tt=[]
+                    for k in range(8):
+                        if(l==0): t = k
+                        else : t=l
+                        tt.append(t)
+                    ttt.append(tt)
+                tttt.append(ttt)
+            patch_label.append(tttt)
         patch_all = np.zeros(np.shape(x))
-        for i in range(context_size):
-            patch_size = 8
-            stride_size = 4
-            patches = x[:,i].unfold(1,patch_size, stride_size).unfold(2,patch_size, stride_size)
-            patches = torch.cat((patches, patch_label),3)
-            patch_all[:,i] = patches
+        # for i in range(context_size):
+        patch_size = 8
+        stride_size = 4
+        patches = x.unfold(3,patch_size, stride_size).unfold(4,patch_size, stride_size)
+        patches = patches.view(-1,64,3,8,8)
+
+        patches = torch.cat((patches, patch_label),2)
+        patch_all = patches.view(-1,64,5,8,8)
 
         skip_in  = F.relu(self.conv1(patch_all))
         skip_out = F.relu(self.conv2(skip_in))
@@ -45,7 +51,7 @@ class Patcher(nn.Module):
         r = F.relu(self.conv4(r)) + skip_out
 
         # Broadcast
-        v = v.view(v.size(0), 7, 1, 1).repeat(1, 1, 16, 16)
+        v = v.view(v.size(0), 7, 1, 1).repeat(1, 1, 8, 8)
 
         # Resisual connection
         # Concatenate
@@ -79,5 +85,5 @@ class PatchKey(nn.Module):
         r = F.relu(self.conv4(r))
         r = F.relu(self.conv5(r))
         r = F.relu(self.conv6(r))
-        
+
         return r
