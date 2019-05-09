@@ -15,6 +15,10 @@ class GQNAttention(nn.Module):
         # Number of generative layers
         self.L = L
 
+        # Patch layers
+        self.patcher = Patcher()
+        self.patchKey = PatchKey()
+
         # Generation network
         self.shared_core = shared_core
         if shared_core:
@@ -41,10 +45,12 @@ class GQNAttention(nn.Module):
     def forward(self, x, v, v_q, x_q, sigma):
         B, M, *_ = x.size()
 
-        # Scene encoder
-        r= Patcher(x,v)
         #TODO from here (mkroughdiamond)
-        key_images = PatchKey(x).reshape(-1,64*M,1,64)
+        # Scene encoder
+        r= self.patcher(x,v)
+        print(r.shape)
+        key_images = self.patchKey(x)
+        print(key_images.shape)
 
         # Generator initial state
         c_g = x.new_zeros((B, 64, 8, 8))
