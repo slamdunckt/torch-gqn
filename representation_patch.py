@@ -53,6 +53,7 @@ class Patcher(nn.Module):       #patcher of images and poses
         
         result = result.squeeze()
         result = result.reshape(batch_size,context_size,8,8,-1)
+        result = result.transpose(2,4)
         return result
 
 class PatchKey(nn.Module):  # patcher of pure images
@@ -78,6 +79,4 @@ class PatchKey(nn.Module):  # patcher of pure images
             r = F.relu(self.conv6(r)).unsqueeze(0)
             result = torch.cat((result,r),0)
 
-        result = result.transpose(2,4)
-        result = result.transpose(2,3)
         return result
