@@ -11,6 +11,7 @@ from torchvision.utils import make_grid, save_image
 from gqn_dataset import GQNDataset, Scene, transform_viewpoint, sample_batch
 from scheduler import AnnealingStepLR
 from model import GQN
+from model_attention import GQNAttention
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Generative Query Network Implementation')
@@ -33,6 +34,15 @@ if __name__ == '__main__':
                         help='whether to share the weights of the cores across generation steps (default: False)', \
                         default=False)
     parser.add_argument('--seed', type=int, help='random seed (default: None)', default=None)
+    parser.add_argument('--attention', type=bool, \
+                        help='apply attention to model (default: False', \
+                        default=False)
+    parser.add_argument('--resize', type=bool, \
+                        help='resizing images while training (default: False)', \
+                        default=False)
+    parser.add_argument('--image_size', type=int, \
+                        help='image resizing width (default: 64)', \
+                        default=64)
     args = parser.parse_args()
 
     device = f"cuda:{args.device_ids[0]}" if torch.cuda.is_available() else "cpu"
@@ -61,8 +71,12 @@ if __name__ == '__main__':
     writer = SummaryWriter(log_dir=os.path.join(log_dir,'runs'))
 
     # Dataset
-    train_dataset = GQNDataset(root_dir=train_data_dir, target_transform=transform_viewpoint)
-    test_dataset = GQNDataset(root_dir=test_data_dir, target_transform=transform_viewpoint)
+    if args.resize:
+        train_dataset = GQNDataset(root_dir=train_data_dir, target_transform=transform_viewpoint, image_size=args.image_size)
+        test_dataset = GQNDataset(root_dir=test_data_dir, target_transform=transform_viewpoint, image_size=args.image_size)
+    else:
+        train_dataset = GQNDataset(root_dir=train_data_dir, target_transform=transform_viewpoint)
+        test_dataset = GQNDataset(root_dir=test_data_dir, target_transform=transform_viewpoint)
     D = args.dataset
 
     # Pixel standard-deviation
@@ -79,7 +93,10 @@ if __name__ == '__main__':
     S_max = args.gradient_steps
 
     # Define model
-    model = GQN(representation=args.representation, L=L, shared_core=args.shared_core).to(device)
+    if args.attention:
+        model = GQNAttention(L=L, shared_core=args.shared_core).to(device)
+    else:
+        model = GQN(representation=args.representation, L=L, shared_core=args.shared_core).to(device)
     if len(args.device_ids)>1:
         model = nn.DataParallel(model, device_ids=args.device_ids)
 

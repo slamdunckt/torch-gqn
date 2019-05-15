@@ -3,25 +3,21 @@ from torch import nn
 from torch.nn import functional as F
 from torch.distributions import Normal
 from torch.distributions.kl import kl_divergence
-from representation import Pyramid, Tower, Pool
-from representation_patch import
-from core import InferenceCore, GenerationCore
+from representation_patch import PatchKey, Patcher
+from core_attention import InferenceCore, GenerationCore
 
-class GQN(nn.Module):
-    def __init__(self, representation="pool", L=12, shared_core=False):
-        super(GQN, self).__init__()
+# model for attention
+# it contains only attention model ( not pyramid, tower and pool)
+class GQNAttention(nn.Module):
+    def __init__(self, L=12, shared_core=False):
+        super(GQNAttention, self).__init__()
 
         # Number of generative layers
         self.L = L
 
-        # Representation network
-        self.representation = representation
-        if representation=="pyramid":
-            self.phi = Pyramid()
-        elif representation=="tower":
-            self.phi = Tower()
-        elif representation=="pool":
-            self.phi = Pool()
+        # Patch layers
+        self.patcher = Patcher()
+        self.patchKey = PatchKey()
 
         # Generation network
         self.shared_core = shared_core
@@ -32,22 +28,31 @@ class GQN(nn.Module):
             self.inference_core = nn.ModuleList([InferenceCore() for _ in range(L)])
             self.generation_core = nn.ModuleList([GenerationCore() for _ in range(L)])
 
-        self.eta_pi = nn.Conv2d(128, 2*3, kernel_size=5, stride=1, padding=2)
-        self.eta_g = nn.Conv2d(128, 3, kernel_size=1, stride=1, padding=0)
-        self.eta_e = nn.Conv2d(128, 2*3, kernel_size=5, stride=1, padding=2)
+        self.eta_pi = nn.Conv2d(64, 2*3, kernel_size=5, stride=1, padding=2)
+        self.eta_g = nn.Conv2d(64, 3, kernel_size=1, stride=1, padding=0)
+        self.eta_e = nn.Conv2d(64, 2*3, kernel_size=5, stride=1, padding=2)
 
     # EstimateELBO
+    #### parameters
+    #### x : context images
+    #### v : poses
+    #### v_q : queried pose
+    #### x_q : ground truth image
+    #### sigma
+    #### variables
+    #### B : batch size
+    #### M : num of context images
     def forward(self, x, v, v_q, x_q, sigma):
         B, M, *_ = x.size()
 
         # Scene encoder
-
-        r= x.new_zeros((B,64,8,8))
+        patch_r= self.patcher(x,v)
+        key_images = self.patchKey(x)
 
         # Generator initial state
         c_g = x.new_zeros((B, 64, 8, 8))
         h_g = x.new_zeros((B, 64, 8, 8))
-        u = x.new_zeros((B, 64, 8, 8))
+        u = x.new_zeros((B, 64, 32, 32))
 
         # Inference initial state
         c_e = x.new_zeros((B, 64, 8, 8))
@@ -55,10 +60,19 @@ class GQN(nn.Module):
 
         elbo = 0
         for l in range(self.L):
+
             # Prior factor
             mu_pi, logvar_pi = torch.split(self.eta_pi(h_g), 3, dim=1)
             std_pi = torch.exp(0.5*logvar_pi)
             pi = Normal(mu_pi, std_pi)
+
+            # attention
+            r = torch.Tensor().cuda()
+            for i in range(B):
+                attn_weight = torch.sum(key_images[i] * h_g[i],1).reshape(-1,1,64)
+                attn_weight = F.softmax(attn_weight,-1).reshape(-1,1,8,8).repeat(1,64,1,1)
+                attn_feature = (torch.sum(patch_r[i] * attn_weight,0)).unsqueeze(0)
+                r = torch.cat((r,attn_feature),0)
 
             # Inference state update
             if self.shared_core:
@@ -92,24 +106,27 @@ class GQN(nn.Module):
         B, M, *_ = x.size()
 
         # Scene encoder
-        if self.representation=='tower':
-            r = x.new_zeros((B, 256, 16, 16))
-        else:
-            r = x.new_zeros((B, 256, 1, 1))
-        for k in range(M):
-            r_k = self.phi(x[:, k], v[:, k])
-            r += r_k
+        patch_r= self.patcher(x,v)
+        key_images = self.patchKey(x)
 
-        # Initial state
-        c_g = x.new_zeros((B, 128, 16, 16))
-        h_g = x.new_zeros((B, 128, 16, 16))
-        u = x.new_zeros((B, 128, 64, 64))
+        # Generator initial state
+        c_g = x.new_zeros((B, 64, 8, 8))
+        h_g = x.new_zeros((B, 64, 8, 8))
+        u = x.new_zeros((B, 64, 32, 32))
 
         for l in range(self.L):
             # Prior factor
             mu_pi, logvar_pi = torch.split(self.eta_pi(h_g), 3, dim=1)
             std_pi = torch.exp(0.5*logvar_pi)
             pi = Normal(mu_pi, std_pi)
+
+            # attention
+            r = torch.Tensor().cuda()
+            for i in range(B):
+                attn_weight = torch.sum(key_images[i] * h_g[i],1).reshape(-1,1,64)
+                attn_weight = F.softmax(attn_weight,-1).reshape(-1,1,8,8).repeat(1,64,1,1)
+                attn_feature = (torch.sum(patch_r[i] * attn_weight,0)).unsqueeze(0)
+                r = torch.cat((r,attn_feature),0)
 
             # Prior sample
             z = pi.sample()
@@ -125,26 +142,21 @@ class GQN(nn.Module):
 
         return torch.clamp(mu, 0, 1)
 
-    def kl_divergence(self, x, v, v_q, x_q):
+    def kl_divergence(self, x, v, v_q, x_q):    # for MULTI-gpu
         B, M, *_ = x.size()
 
         # Scene encoder
-        if self.representation=='tower':
-            r = x.new_zeros((B, 256, 16, 16))
-        else:
-            r = x.new_zeros((B, 256, 1, 1))
-        for k in range(M):
-            r_k = self.phi(x[:, k], v[:, k])
-            r += r_k
+        patch_r= self.patcher(x,v)
+        key_images = self.patchKey(x)
 
         # Generator initial state
-        c_g = x.new_zeros((B, 128, 16, 16))
-        h_g = x.new_zeros((B, 128, 16, 16))
-        u = x.new_zeros((B, 128, 64, 64))
+        c_g = x.new_zeros((B, 64, 8, 8))
+        h_g = x.new_zeros((B, 64, 8, 8))
+        u = x.new_zeros((B, 64, 32, 32))
 
         # Inference initial state
-        c_e = x.new_zeros((B, 128, 16, 16))
-        h_e = x.new_zeros((B, 128, 16, 16))
+        c_e = x.new_zeros((B, 64, 8, 8))
+        h_e = x.new_zeros((B, 64, 8, 8))
 
         kl = 0
         for l in range(self.L):
@@ -152,6 +164,14 @@ class GQN(nn.Module):
             mu_pi, logvar_pi = torch.split(self.eta_pi(h_g), 3, dim=1)
             std_pi = torch.exp(0.5*logvar_pi)
             pi = Normal(mu_pi, std_pi)
+
+            # attention
+            r = torch.Tensor().cuda()
+            for i in range(B):
+                attn_weight = torch.sum(key_images[i] * h_g[i],1).reshape(-1,1,64)
+                attn_weight = F.softmax(attn_weight,-1).reshape(-1,1,8,8).repeat(1,64,1,1)
+                attn_feature = (torch.sum(patch_r[i] * attn_weight,0)).unsqueeze(0)
+                r = torch.cat((r,attn_feature),0)
 
             # Inference state update
             if self.shared_core:
@@ -182,24 +202,28 @@ class GQN(nn.Module):
         B, M, *_ = x.size()
 
         # Scene encoder
-        if self.representation=='tower':
-            r = x.new_zeros((B, 256, 16, 16))
-        else:
-            r = x.new_zeros((B, 256, 1, 1))
-        for k in range(M):
-            r_k = self.phi(x[:, k], v[:, k])
-            r += r_k
+        patch_r= self.patcher(x,v)
+        key_images = self.patchKey(x)
 
         # Generator initial state
-        c_g = x.new_zeros((B, 128, 16, 16))
-        h_g = x.new_zeros((B, 128, 16, 16))
-        u = x.new_zeros((B, 128, 64, 64))
+        c_g = x.new_zeros((B, 64, 8, 8))
+        h_g = x.new_zeros((B, 64, 8, 8))
+        u = x.new_zeros((B, 64, 32, 32))
 
         # Inference initial state
-        c_e = x.new_zeros((B, 128, 16, 16))
-        h_e = x.new_zeros((B, 128, 16, 16))
+        c_e = x.new_zeros((B, 64, 8, 8))
+        h_e = x.new_zeros((B, 64, 8, 8))
 
         for l in range(self.L):
+
+            # attention
+            r = torch.Tensor().cuda()
+            for i in range(B):
+                attn_weight = torch.sum(key_images[i] * h_g[i],1).reshape(-1,1,64)
+                attn_weight = F.softmax(attn_weight,-1).reshape(-1,1,8,8).repeat(1,64,1,1)
+                attn_feature = (torch.sum(patch_r[i] * attn_weight,0)).unsqueeze(0)
+                r = torch.cat((r,attn_feature),0)
+
             # Inference state update
             if self.shared_core:
                 c_e, h_e = self.inference_core(x_q, v_q, r, c_e, h_e, h_g, u)
