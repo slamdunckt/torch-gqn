@@ -15,15 +15,15 @@ class Pyramid(nn.Module):
             nn.Conv2d(128, 256, kernel_size=8, stride=8),
             nn.ReLU()
         )
-        
+
 
     def forward(self, x, v):
         # Broadcast
         v = v.view(-1, 7, 1, 1).repeat(1, 1, 64, 64)
         r = self.net(torch.cat((v, x), dim=1))
-        
+
         return r
-    
+
 class Tower(nn.Module):
     def __init__(self):
         super(Tower, self).__init__()
@@ -46,7 +46,7 @@ class Tower(nn.Module):
 
         # Broadcast
         v = v.view(v.size(0), 7, 1, 1).repeat(1, 1, 16, 16)
-        
+
         # Resisual connection
         # Concatenate
         skip_in = torch.cat((r, v), dim=1)
@@ -57,7 +57,7 @@ class Tower(nn.Module):
         r = F.relu(self.conv8(r))
 
         return r
-    
+
 class Pool(nn.Module):
     def __init__(self):
         super(Pool, self).__init__()
@@ -81,7 +81,7 @@ class Pool(nn.Module):
 
         # Broadcast
         v = v.view(v.size(0), 7, 1, 1).repeat(1, 1, 16, 16)
-        
+
         # Resisual connection
         # Concatenate
         skip_in = torch.cat((r, v), dim=1)
@@ -90,7 +90,7 @@ class Pool(nn.Module):
         r = F.relu(self.conv6(skip_in))
         r = F.relu(self.conv7(r)) + skip_out
         r = F.relu(self.conv8(r))
-        
+
         # Pool
         r = self.pool(r)
 

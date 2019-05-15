@@ -24,6 +24,7 @@ class Patcher(nn.Module):       #patcher of images and poses
 
     def forward(self, x, v):
         # Resisual connection
+
         batch_size = x.shape[0];
         context_size = x.shape[1];
         
@@ -34,6 +35,7 @@ class Patcher(nn.Module):       #patcher of images and poses
 
             skip_in  = F.relu(self.conv1(patches))
             skip_out = F.relu(self.conv2(skip_in))
+
 
             r = F.relu(self.conv3(skip_in))
             r = F.relu(self.conv4(r)) + skip_out
@@ -68,6 +70,7 @@ class PatchKey(nn.Module):  # patcher of pure images
 
     def forward(self, x):
         # Resisual connection
+
         batch_size = x.shape[0]
         result = torch.Tensor().cuda()
         for i in range(batch_size):
