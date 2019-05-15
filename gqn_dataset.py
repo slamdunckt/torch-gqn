@@ -4,6 +4,7 @@ import torch
 from torchvision.transforms import ToTensor, Resize
 from torch.utils.data import Dataset
 import random
+import gzip
 
 Context = collections.namedtuple('Context', ['frames', 'cameras'])
 Scene = collections.namedtuple('Scene', ['frames', 'cameras'])
@@ -21,19 +22,21 @@ def transform_viewpoint(v):
 
 
 class GQNDataset(Dataset):
-    def __init__(self, root_dir, transform=None, target_transform=None):
+    def __init__(self, root_dir, transform=None, target_transform=None, image_size=64):
         self.root_dir = root_dir
         self.transform = transform
         self.target_transform = target_transform
+        self.image_size = image_size
 
     def __len__(self):
         return len(os.listdir(self.root_dir))
 
     def __getitem__(self, idx):
-        scene_path = os.path.join(self.root_dir, "{}.pt".format(idx))
-        data = torch.load(scene_path)
+        scene_path = os.path.join(self.root_dir, "{}.pt.gz".format(idx))
+        with gzip.open(scene_path) as f:
+            data = torch.load(f)
 
-        byte_to_tensor = lambda x: ToTensor()(Resize(64)((Image.open(io.BytesIO(x)))))
+        byte_to_tensor = lambda x: ToTensor()(Resize(self.image_size)((Image.open(io.BytesIO(x)))))
 
 
         images = torch.stack([byte_to_tensor(frame) for frame in data.frames])
@@ -60,6 +63,8 @@ def sample_batch(x_data, v_data, D, M=None, seed=None):
         K = 20
     elif D == "Shepard-Metzler":
         K = 15
+    elif D == "Mazes":
+        K = 8
 
     # Sample number of views
     if not M:
