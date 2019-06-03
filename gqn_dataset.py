@@ -32,9 +32,8 @@ class GQNDataset(Dataset):
         return len(os.listdir(self.root_dir))
 
     def __getitem__(self, idx):
-        scene_path = os.path.join(self.root_dir, "{}.pt.gz".format(idx))
-        with gzip.open(scene_path) as f:
-            data = torch.load(f)
+        scene_path = os.path.join(self.root_dir, "{}.pt".format(idx))
+        data = torch.load(scene_path)
 
         byte_to_tensor = lambda x: ToTensor()(Resize(self.image_size)((Image.open(io.BytesIO(x)))))
 
@@ -64,7 +63,9 @@ def sample_batch(x_data, v_data, D, M=None, seed=None):
     elif D == "Shepard-Metzler":
         K = 15
     elif D == "Mazes":
-        K = 8
+        K = 20
+    else:
+        K = 20
 
     # Sample number of views
     if not M:
@@ -79,3 +80,4 @@ def sample_batch(x_data, v_data, D, M=None, seed=None):
     x_q, v_q = x_data[:, query_idx], v_data[:, query_idx]
     
     return x, v, x_q, v_q
+
