@@ -6,16 +6,16 @@ from torch.nn import functional as F
 class Patcher(nn.Module):       #patcher of images and poses
     def __init__(self):
         super(Patcher, self).__init__()
-        self.conv1 = nn.Conv2d(5, 64, kernel_size=2, stride=2)
-        self.conv2 = nn.Conv2d(64, 64, kernel_size=2, stride=2)
-        self.conv3 = nn.Conv2d(64, 32, kernel_size=3, stride=1, padding=1)
-        self.conv4 = nn.Conv2d(32, 64, kernel_size=2, stride=2)
-        self.conv5 = nn.Conv2d(64+7, 64, kernel_size=3, stride=1, padding=1)
-        self.conv6 = nn.Conv2d(64+7, 32, kernel_size=3, stride=1, padding=1)
-        self.conv7 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
-        self.conv8 = nn.Conv2d(64, 64, kernel_size=2, stride=1)
+        self.conv1 = nn.Conv2d(5, 128, kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(128, 128, kernel_size=2, stride=2)
+        self.conv3 = nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=1)
+        self.conv4 = nn.Conv2d(64, 128, kernel_size=2, stride=2)
+        self.conv5 = nn.Conv2d(128 + 7, 128, kernel_size=3, stride=1, padding=1)
+        self.conv6 = nn.Conv2d(128 + 7, 64, kernel_size=3, stride=1, padding=1)
+        self.conv7 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
+        self.conv8 = nn.Conv2d(128, 128, kernel_size=2, stride=1)
 
-        self.unfold = nn.Unfold(kernel_size=(8,8),padding=2,stride=(4,4))
+        self.unfold = nn.Unfold(kernel_size=(16,16),padding=4,stride=(8,8))
         self.patch_label = torch.Tensor(1,2,8,8).cuda()
         for i in range(8):
             for j in range(8):
@@ -54,19 +54,19 @@ class Patcher(nn.Module):       #patcher of images and poses
             result = torch.cat((result,r),0)
         
         result = result.squeeze()
-        result = result.reshape(batch_size,context_size,8,8,-1)
+        result = result.reshape(batch_size,context_size,16,16,-1)
         result = result.transpose(2,4)
         return result
 
 class PatchKey(nn.Module):  # patcher of pure images
     def __init__(self):
         super(PatchKey, self).__init__()
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=2, stride=2)
-        self.conv2 = nn.Conv2d(32, 32, kernel_size=3, stride=1,padding=1)
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=2, stride=2)
-        self.conv4 = nn.Conv2d(64, 32, kernel_size=1, stride=1)
-        self.conv5 = nn.Conv2d(32, 32, kernel_size=1, stride=1)
-        self.conv6 = nn.Conv2d(32, 64, kernel_size=1, stride=1)
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=2, stride=2)
+        self.conv4 = nn.Conv2d(128, 64, kernel_size=1, stride=1)
+        self.conv5 = nn.Conv2d(64, 64, kernel_size=1, stride=1)
+        self.conv6 = nn.Conv2d(64, 128, kernel_size=1, stride=1)
 
     def forward(self, x):
         # Resisual connection
@@ -83,3 +83,4 @@ class PatchKey(nn.Module):  # patcher of pure images
             result = torch.cat((result,r),0)
 
         return result
+

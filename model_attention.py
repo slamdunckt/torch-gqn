@@ -28,9 +28,9 @@ class GQNAttention(nn.Module):
             self.inference_core = nn.ModuleList([InferenceCore() for _ in range(L)])
             self.generation_core = nn.ModuleList([GenerationCore() for _ in range(L)])
 
-        self.eta_pi = nn.Conv2d(64, 2*3, kernel_size=5, stride=1, padding=2)
-        self.eta_g = nn.Conv2d(64, 3, kernel_size=1, stride=1, padding=0)
-        self.eta_e = nn.Conv2d(64, 2*3, kernel_size=5, stride=1, padding=2)
+        self.eta_pi = nn.Conv2d(128, 2*3, kernel_size=5, stride=1, padding=2)
+        self.eta_g = nn.Conv2d(128, 3, kernel_size=1, stride=1, padding=0)
+        self.eta_e = nn.Conv2d(128, 2*3, kernel_size=5, stride=1, padding=2)
 
     # EstimateELBO
     #### parameters
@@ -50,13 +50,13 @@ class GQNAttention(nn.Module):
         key_images = self.patchKey(x)
 
         # Generator initial state
-        c_g = x.new_zeros((B, 64, 8, 8))
-        h_g = x.new_zeros((B, 64, 8, 8))
-        u = x.new_zeros((B, 64, 32, 32))
+        c_g = x.new_zeros((B, 128, 16, 16))
+        h_g = x.new_zeros((B, 128, 16, 16))
+        u = x.new_zeros((B, 128, 64, 64))
 
         # Inference initial state
-        c_e = x.new_zeros((B, 64, 8, 8))
-        h_e = x.new_zeros((B, 64, 8, 8))
+        c_e = x.new_zeros((B, 128, 16, 16))
+        h_e = x.new_zeros((B, 128, 16, 16))
 
         elbo = 0
         for l in range(self.L):
@@ -69,8 +69,8 @@ class GQNAttention(nn.Module):
             # attention
             r = torch.Tensor().cuda()
             for i in range(B):
-                attn_weight = torch.sum(key_images[i] * h_g[i],1).reshape(-1,1,64)
-                attn_weight = F.softmax(attn_weight,-1).reshape(-1,1,8,8).repeat(1,64,1,1)
+                attn_weight = torch.sum(key_images[i] * h_g[i],1).reshape(-1,1,128)
+                attn_weight = F.softmax(attn_weight,-1).reshape(-1,1,16,16).repeat(1,128,1,1)
                 attn_feature = (torch.sum(patch_r[i] * attn_weight,0)).unsqueeze(0)
                 r = torch.cat((r,attn_feature),0)
 
@@ -110,9 +110,9 @@ class GQNAttention(nn.Module):
         key_images = self.patchKey(x)
 
         # Generator initial state
-        c_g = x.new_zeros((B, 64, 8, 8))
-        h_g = x.new_zeros((B, 64, 8, 8))
-        u = x.new_zeros((B, 64, 32, 32))
+        c_g = x.new_zeros((B, 128, 16, 16))
+        h_g = x.new_zeros((B, 128, 16, 16))
+        u = x.new_zeros((B, 128, 64, 64))
 
         for l in range(self.L):
             # Prior factor
@@ -123,8 +123,8 @@ class GQNAttention(nn.Module):
             # attention
             r = torch.Tensor().cuda()
             for i in range(B):
-                attn_weight = torch.sum(key_images[i] * h_g[i],1).reshape(-1,1,64)
-                attn_weight = F.softmax(attn_weight,-1).reshape(-1,1,8,8).repeat(1,64,1,1)
+                attn_weight = torch.sum(key_images[i] * h_g[i],1).reshape(-1,1,128)
+                attn_weight = F.softmax(attn_weight,-1).reshape(-1,1,16,16).repeat(1,128,1,1)
                 attn_feature = (torch.sum(patch_r[i] * attn_weight,0)).unsqueeze(0)
                 r = torch.cat((r,attn_feature),0)
 
@@ -150,13 +150,13 @@ class GQNAttention(nn.Module):
         key_images = self.patchKey(x)
 
         # Generator initial state
-        c_g = x.new_zeros((B, 64, 8, 8))
-        h_g = x.new_zeros((B, 64, 8, 8))
-        u = x.new_zeros((B, 64, 32, 32))
+        c_g = x.new_zeros((B, 128, 16, 16))
+        h_g = x.new_zeros((B, 128, 16, 16))
+        u = x.new_zeros((B, 128, 64, 64))
 
         # Inference initial state
-        c_e = x.new_zeros((B, 64, 8, 8))
-        h_e = x.new_zeros((B, 64, 8, 8))
+        c_e = x.new_zeros((B, 128, 16, 16))
+        h_e = x.new_zeros((B, 128, 16, 16))
 
         kl = 0
         for l in range(self.L):
@@ -168,8 +168,8 @@ class GQNAttention(nn.Module):
             # attention
             r = torch.Tensor().cuda()
             for i in range(B):
-                attn_weight = torch.sum(key_images[i] * h_g[i],1).reshape(-1,1,64)
-                attn_weight = F.softmax(attn_weight,-1).reshape(-1,1,8,8).repeat(1,64,1,1)
+                attn_weight = torch.sum(key_images[i] * h_g[i],1).reshape(-1,1,128)
+                attn_weight = F.softmax(attn_weight,-1).reshape(-1,1,16,16).repeat(1,128,1,1)
                 attn_feature = (torch.sum(patch_r[i] * attn_weight,0)).unsqueeze(0)
                 r = torch.cat((r,attn_feature),0)
 
@@ -206,21 +206,21 @@ class GQNAttention(nn.Module):
         key_images = self.patchKey(x)
 
         # Generator initial state
-        c_g = x.new_zeros((B, 64, 8, 8))
-        h_g = x.new_zeros((B, 64, 8, 8))
-        u = x.new_zeros((B, 64, 32, 32))
+        c_g = x.new_zeros((B, 128, 16, 16))
+        h_g = x.new_zeros((B, 128, 16, 16))
+        u = x.new_zeros((B, 128, 64, 64))
 
         # Inference initial state
-        c_e = x.new_zeros((B, 64, 8, 8))
-        h_e = x.new_zeros((B, 64, 8, 8))
+        c_e = x.new_zeros((B, 128, 16, 16))
+        h_e = x.new_zeros((B, 128, 16, 16))
 
         for l in range(self.L):
 
             # attention
             r = torch.Tensor().cuda()
             for i in range(B):
-                attn_weight = torch.sum(key_images[i] * h_g[i],1).reshape(-1,1,64)
-                attn_weight = F.softmax(attn_weight,-1).reshape(-1,1,8,8).repeat(1,64,1,1)
+                attn_weight = torch.sum(key_images[i] * h_g[i],1).reshape(-1,1,128)
+                attn_weight = F.softmax(attn_weight,-1).reshape(-1,1,16,16).repeat(1,128,1,1)
                 attn_feature = (torch.sum(patch_r[i] * attn_weight,0)).unsqueeze(0)
                 r = torch.cat((r,attn_feature),0)
 
@@ -247,3 +247,4 @@ class GQNAttention(nn.Module):
         mu = self.eta_g(u)
 
         return torch.clamp(mu, 0, 1)
+
