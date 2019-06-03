@@ -15,34 +15,42 @@ from model_attention import GQNAttention
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Generative Query Network Implementation')
-    parser.add_argument('--gradient_steps', type=int, default=2*10**6, help='number of gradient steps to run (default: 2 million)')
-    parser.add_argument('--batch_size', type=int, default=36, help='size of batch (default: 36)')
-    parser.add_argument('--dataset', type=str, default='Shepard-Metzler', help='dataset (dafault: Shepard-Mtzler)')
-    parser.add_argument('--train_data_dir', type=str, help='location of training data', \
-                        default="/workspace/dataset/shepard_metzler_7_parts-torch/train")
-    parser.add_argument('--test_data_dir', type=str, help='location of test data', \
-                        default="/workspace/dataset/shepard_metzler_7_parts-torch/test")
-    parser.add_argument('--root_log_dir', type=str, help='root location of log', default='/workspace/logs')
-    parser.add_argument('--log_dir', type=str, help='log directory (default: GQN)', default='GQN')
-    parser.add_argument('--log_interval', type=int, help='interval number of steps for logging', default=100)
-    parser.add_argument('--save_interval', type=int, help='interval number of steps for saveing models', default=10000)
-    parser.add_argument('--workers', type=int, help='number of data loading workers', default=0)
-    parser.add_argument('--device_ids', type=int, nargs='+', help='list of CUDA devices (default: [0])', default=[0])
-    parser.add_argument('--representation', type=str, help='representation network (default: pool)', default='pool')
-    parser.add_argument('--layers', type=int, help='number of generative layers (default: 12)', default=12)
-    parser.add_argument('--shared_core', type=bool, \
-                        help='whether to share the weights of the cores across generation steps (default: False)', \
-                        default=False)
-    parser.add_argument('--seed', type=int, help='random seed (default: None)', default=None)
-    parser.add_argument('--attention', type=bool, \
-                        help='apply attention to model (default: False', \
-                        default=False)
-    parser.add_argument('--resize', type=bool, \
-                        help='resizing images while training (default: False)', \
-                        default=False)
-    parser.add_argument('--image_size', type=int, \
-                        help='image resizing width (default: 64)', \
-                        default=64)
+    parser.add_argument('--gradient_steps', type=int, default=1*10**6, \
+                        help='number of gradient steps to run (default: 1 million)')
+    parser.add_argument('--batch_size', type=int, default=36, \
+                        help='size of batch (default: 36)')
+    parser.add_argument('--dataset', type=str, default='Mazes', \
+                        help='dataset (dafault: Mazes)')
+    parser.add_argument('--train_data_dir', type=str, default="../dataset/mazes-torch/train", \
+                        help='location of train data')
+    parser.add_argument('--test_data_dir', type=str, default="../dataset/mazes-torch/test", \
+                        help='location of test data')
+    parser.add_argument('--root_log_dir', type=str, default="../logs", \
+                        help='root location of log')
+    parser.add_argument('--log_dir', type=str, default='GQN', \
+                        help='log directory (default: GQN)')
+    parser.add_argument('--log_interval', type=int, default=100, \
+                        help='interval number of steps for logging')
+    parser.add_argument('--save_interval', type=int, default=50000, \
+                        help='interval number of steps for saveing models')
+    parser.add_argument('--workers', type=int, default=0, \
+                        help='number of data loading workers')
+    parser.add_argument('--device_ids', type=int, nargs='+', default=[0], \
+                        help='list of CUDA devices (default: [0])')
+    parser.add_argument('--representation', type=str, default='pool', \
+                        help='representation network (default: pool)')
+    parser.add_argument('--layers', type=int, default=12, \
+                        help='number of generative layers (default: 12)')
+    parser.add_argument('--shared_core', type=bool, default=False, \
+                        help='whether to share the weights of the cores across generation steps (default: False)')
+    parser.add_argument('--seed', type=int, default=None, \
+                        help='random seed (default: None')
+    parser.add_argument('--attention', type=bool, default=False, \
+                        help='apply attention to model (default: False)')
+    parser.add_argument('--resize', type=bool, default=False, \
+                        help='resizing images while training (default: False)')
+    parser.add_argument('--image_size', type=int, default=64, \
+                        help='image resizing width (default: 64)')
     args = parser.parse_args()
 
     device = f"cuda:{args.device_ids[0]}" if torch.cuda.is_available() else "cpu"
@@ -169,3 +177,4 @@ if __name__ == '__main__':
         
     torch.save(model.state_dict(), log_dir + "/models/model-final.pt")  
     writer.close()
+
