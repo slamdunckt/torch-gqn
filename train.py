@@ -2,7 +2,7 @@ import argparse
 import datetime
 import math
 import os
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from tensorboardX import SummaryWriter
 import torch
 from torch import nn
@@ -12,6 +12,41 @@ from gqn_dataset import GQNDataset, Scene, transform_viewpoint, sample_batch
 from scheduler import AnnealingStepLR
 from model import GQN
 from model_attention import GQNAttention
+
+def load_checkpoint(model, optimizer, filename):
+    start_epoch = 0
+    if os.path.isfile(filename):
+        print("=> Loading checkpoint '{}'".format(filename))
+        checkpoint = torch.load(filename)
+        start_epoch = checkpoint['epoch']
+
+        #model.load_state_dict(checkpoint['state_dict'])  # simple original usage
+                                                          # but we used nn.parallel...
+        state_dict = checkpoint['state_dict']
+        from collections import OrderedDict
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = k[7:]
+            new_state_dict[name] = v
+        model.load_state_dict(new_state_dict)
+        '''
+        for k, v in state_dict.items():
+            if 'module' not in k:
+                k = 'module.'+k
+            else:
+                k = k.replace('features.module.', 'module.features.')
+            new_state_dict[k] = v
+        model.load_state_dict(new_state_dict)
+        '''
+
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        print("=> Loaded checkpoint '{}' (epoch {})"
+                  .format(filename, checkpoint['epoch']))
+    else:
+        print("=> No checkpoint found at '{}'".format(filename))
+
+    return model, optimizer, start_epoch
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Generative Query Network Implementation')
@@ -51,9 +86,14 @@ if __name__ == '__main__':
                         help='resizing images while training (default: False)')
     parser.add_argument('--image_size', type=int, default=64, \
                         help='image resizing width (default: 64)')
+    parser.add_argument('--chkpt', type=int, default=0, \
+                        help='checkpoint to resume training')
     args = parser.parse_args()
 
     device = f"cuda:{args.device_ids[0]}" if torch.cuda.is_available() else "cpu"
+
+    # Check-point
+    chkpt = args.chkpt
     
     # Seed
     if args.seed!=None:
@@ -111,16 +151,32 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=5e-4, betas=(0.9, 0.999), eps=1e-08)
     scheduler = AnnealingStepLR(optimizer, mu_i=5e-4, mu_f=5e-5, n=1.6e6)
 
+    # Update model if checkpoint was given
+    if chkpt > 0:
+        filename = log_dir + "/models/model-{}.pt".format(chkpt)
+        model, optimizer, start_epoch = load_checkpoint(model, optimizer, filename)
+    
+    if len(args.device_ids)>1:
+        model = nn.DataParallel(model, device_ids=args.device_ids)
+    
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if isinstance(v, torch.Tensor):
+                state[k] = v.to(device)
+
     kwargs = {'num_workers':num_workers, 'pin_memory': True} if torch.cuda.is_available() else {}
 
     train_loader = DataLoader(train_dataset, batch_size=B, shuffle=True, **kwargs)
     test_loader = DataLoader(test_dataset, batch_size=B, shuffle=True, **kwargs)
 
     train_iter = iter(train_loader)
+
+    #TODO: save and restore the sampled test data when resume training from checkpoint
     x_data_test, v_data_test = next(iter(test_loader))
 
     # Training Iterations
-    for t in tqdm(range(S_max)):
+    #for t in tqdm(range(S_max)):
+    for t in trange(chkpt+1, S_max, total=S_max, initial=chkpt+1):
         try:
             x_data, v_data = next(train_iter)
         except StopIteration:
@@ -160,7 +216,9 @@ if __name__ == '__main__':
                 writer.add_image('test_generation', make_grid(x_q_hat_test, 6, pad_value=1), t)
 
             if t % save_interval_num == 0:
-                torch.save(model.state_dict(), log_dir + "/models/model-{}.pt".format(t))
+                state = {'epoch': t+1, 'state_dict': model.state_dict(), 'optimizer': optimizer.state_dict(), }
+                torch.save(state, log_dir + "/models/model-{}.pt".format(t))
+                #torch.save(model.state_dict(), log_dir + "/models/model-{}.pt".format(t))
 
         # Compute empirical ELBO gradients
         (-elbo.mean()).backward()
